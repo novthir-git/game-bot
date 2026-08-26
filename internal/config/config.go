@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -219,34 +221,56 @@ func (b *Bundle) LogsDir() string { return filepath.Join(b.Dir, "logs") }
 func (b *Bundle) StatePath() string { return filepath.Join(b.LogsDir(), "state.json") }
 
 // Load 读取 gameDir/config/ 下的 device.yaml、game.yaml、tasks.yaml，
-// 并依次叠加同目录的 local.yaml（若存在）。
+// 并叠加同目录的 local.yaml（若存在）。
 func Load(gameDir string) (*Bundle, error) {
 	b := &Bundle{Dir: gameDir}
 	cfgDir := filepath.Join(gameDir, "config")
 
-	for _, item := range []struct {
+	files := []struct {
 		file string
 		dst  any
 	}{
 		{"device.yaml", &b.Device},
 		{"game.yaml", &b.Game},
 		{"tasks.yaml", &b.Tasks},
-	} {
-		if err := readYAML(filepath.Join(cfgDir, item.file), item.dst); err != nil {
+	}
+
+	// 第一遍严格解析：基础配置里出现结构体上没有的字段直接报错。
+	// 一个拼错的字段名如果被静默忽略，排查起来会非常费时间。
+	raws := make([][]byte, len(files))
+	for i, item := range files {
+		path := filepath.Join(cfgDir, item.file)
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("读取 %s: %w", path, err)
+		}
+		raws[i] = raw
+		if err := decodeStrict(path, raw, item.dst); err != nil {
 			return nil, err
 		}
 	}
 
 	// local.yaml 是单一覆盖层，可以覆盖上面任意文件里的字段。
 	local := filepath.Join(cfgDir, "local.yaml")
-	if _, err := os.Stat(local); err == nil {
-		// 覆盖层按需只写部分字段，且同一份内容会往三个结构体上各叠一次，
-		// 因此这里必须放开未知字段检查。
-		for _, dst := range []any{&b.Device, &b.Game, &b.Tasks} {
-			if err := readYAMLLoose(local, dst); err != nil {
-				return nil, err
+	if overlay, err := os.ReadFile(local); err == nil {
+		var unknown [][]string
+		for i, item := range files {
+			added, err := applyOverlay(raws[i], overlay, item.dst)
+			if err != nil {
+				return nil, fmt.Errorf("%s: %w", local, err)
 			}
+			unknown = append(unknown, added)
 		}
+		// local.yaml 走宽松解码，写错的字段名不会报错只会被忽略——
+		// 而这正是最难排查的一类配置问题。三个文件里都不存在的键路径，
+		// 必然是笔误或不存在的设置项，在这里拦下来。
+		if bad := intersect(unknown); len(bad) > 0 {
+			sort.Strings(bad)
+			return nil, fmt.Errorf("%s 中有 %d 个键在任何配置文件里都不存在，"+
+				"可能是拼写错误: %s", local, len(bad), strings.Join(bad, ", "))
+		}
+	} else if !os.IsNotExist(err) {
+		return nil, fmt.Errorf("读取 %s: %w", local, err)
 	}
 
 	if err := b.Device.validate(); err != nil {
@@ -261,20 +285,10 @@ func Load(gameDir string) (*Bundle, error) {
 	return b, nil
 }
 
-// readYAML 严格解析：配置里出现结构体上没有的字段直接报错。
-// 一个拼错的字段名如果被静默忽略，排查起来会非常费时间。
-func readYAML(path string, dst any) error { return decodeFile(path, dst, true) }
-
-// readYAMLLoose 宽松解析，用于 local.yaml 覆盖层。
-func readYAMLLoose(path string, dst any) error { return decodeFile(path, dst, false) }
-
-func decodeFile(path string, dst any, strict bool) error {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return fmt.Errorf("读取 %s: %w", path, err)
-	}
+// decodeStrict 解析基础配置，未知字段一律报错。
+func decodeStrict(path string, data []byte, dst any) error {
 	dec := yaml.NewDecoder(bytesReader(data))
-	dec.KnownFields(strict)
+	dec.KnownFields(true)
 	if err := dec.Decode(dst); err != nil {
 		return fmt.Errorf("解析 %s: %w", path, err)
 	}

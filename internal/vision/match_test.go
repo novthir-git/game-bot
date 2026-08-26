@@ -190,3 +190,63 @@ func BenchmarkFindROI(b *testing.B) {
 		Find(hay, ndl, Options{Threshold: 0.78, ROI: &roi})
 	}
 }
+
+// FindAll 的 maxN 必须是「按最终分数排序后取前 N」，而不是
+// 「按抽样分数顺序凑够 N 个」。抽样分数只用于排候选，与全密度分数
+// 的排序并不一致，先截断再排序会把真正的最高分整个丢掉，
+// 而末尾的排序又让调用方误以为 out[0] 就是全图最佳命中。
+func TestFindAllMaxNReturnsTrueTopN(t *testing.T) {
+	hay, ndl := buildUI(1280, 720, 100, 80)
+	// 再贴若干份，并对其中一些做轻微扰动，制造分数各异的候选
+	spots := [][2]int{{400, 80}, {700, 80}, {1000, 80}, {100, 300}, {400, 300}, {700, 300}}
+	for i, p := range spots {
+		for y := 0; y < ndl.H; y++ {
+			for x := 0; x < ndl.W; x++ {
+				v := int(ndl.Pix[y*ndl.W+x])
+				// 扰动幅度随位置递增，让每一处的最终分数都不同
+				if (x+y)%3 == 0 {
+					v += (i + 1) * 7
+				}
+				if v > 255 {
+					v = 255
+				}
+				hay.Pix[(p[1]+y)*hay.W+p[0]+x] = uint8(v)
+			}
+		}
+	}
+
+	full := FindAll(hay, ndl, Options{Threshold: 0}, 0)
+	if len(full) < 4 {
+		t.Fatalf("场景构造有问题，只找到 %d 处候选", len(full))
+	}
+	for n := 1; n <= 4; n++ {
+		got := FindAll(hay, ndl, Options{Threshold: 0}, n)
+		if len(got) != n {
+			t.Errorf("maxN=%d 应返回 %d 条，实际 %d 条", n, n, len(got))
+			continue
+		}
+		for i := 0; i < n; i++ {
+			if got[i].Rect != full[i].Rect || got[i].Score != full[i].Score {
+				t.Errorf("maxN=%d 第 %d 条 = %.4f@%v，期望 %.4f@%v（应与不限个数时的前 N 条一致）",
+					n, i+1, got[i].Score, got[i].Rect, full[i].Score, full[i].Rect)
+			}
+		}
+	}
+}
+
+// 结果必须按分数降序，调用方靠 out[0]/out[1] 算最高分与次高分的差距。
+func TestFindAllResultsAreSortedDescending(t *testing.T) {
+	hay, ndl := buildUI(900, 600, 100, 80)
+	for _, p := range [][2]int{{400, 80}, {700, 300}} {
+		for y := 0; y < ndl.H; y++ {
+			copy(hay.Pix[(p[1]+y)*hay.W+p[0]:(p[1]+y)*hay.W+p[0]+ndl.W], ndl.Pix[y*ndl.W:(y+1)*ndl.W])
+		}
+	}
+	got := FindAll(hay, ndl, Options{Threshold: 0}, 6)
+	for i := 1; i < len(got); i++ {
+		if got[i].Score > got[i-1].Score {
+			t.Errorf("结果未按分数降序：第 %d 条 %.4f > 第 %d 条 %.4f",
+				i+1, got[i].Score, i, got[i-1].Score)
+		}
+	}
+}

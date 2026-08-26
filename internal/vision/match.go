@@ -221,21 +221,48 @@ func FindAll(hay, ndl *Gray, opt Options, maxN int) []Match {
 	if step > 1 {
 		cut -= 0.1
 	}
+	cands := topPositions(scores, sw, ox, oy, ndl, 0, cut)
+
+	// 候选是按「抽样分数」排序的，而抽样分数与全密度分数的排序并不一致
+	// （refineFull 的注释解释了为什么）。因此绝不能在这个顺序上凑够 maxN 就停：
+	// 真正的最高分可能排在抽样序列靠后的位置，一旦被截断就再也进不了结果，
+	// 而末尾的排序又会让调用方误以为 out[0] 就是全图最佳命中。
+	//
+	// 正确顺序是：先复算足够多的候选，排序，最后才截断。
+	// 为此给复算留一个数倍于 maxN 的余量——全部复算在 Threshold 为 0 时
+	// 会退化成上千次全密度评分，代价过高。maxN<=0 表示调用方要全部结果，
+	// 此时不设余量上限，由 cut 负责把候选数压下来。
+	budget := len(cands)
+	if maxN > 0 {
+		budget = maxN * 4
+		if budget < minRefineBudget {
+			budget = minRefineBudget
+		}
+		if budget > len(cands) {
+			budget = len(cands)
+		}
+	}
+
 	full := tplStatsStep(ndl, 1)
-	var out []Match
-	for _, p := range topPositions(scores, sw, ox, oy, ndl, 0, cut) {
+	out := make([]Match, 0, budget)
+	for _, p := range cands[:budget] {
 		m := refineFull(hay, ndl, p, step, roi, full)
 		if m.Score < opt.Threshold {
 			continue
 		}
 		out = append(out, m)
-		if maxN > 0 && len(out) >= maxN {
-			break
-		}
 	}
 	sort.Slice(out, func(a, b int) bool { return out[a].Score > out[b].Score })
+	if maxN > 0 && len(out) > maxN {
+		out = out[:maxN]
+	}
 	return out
 }
+
+// minRefineBudget 是 FindAll 复算候选数的下限。
+// 取 32 是因为单次全密度复算只有几十万次整数运算，三十来次完全无感，
+// 而它足以覆盖抽样误差造成的名次错位。
+const minRefineBudget = 32
 
 type point struct{ X, Y int }
 

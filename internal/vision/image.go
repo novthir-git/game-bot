@@ -20,6 +20,10 @@ type Rect struct {
 func (r Rect) Empty() bool { return r.W <= 0 || r.H <= 0 }
 
 // Clip 把矩形裁到 w x h 的画布范围内。
+//
+// 返回值保证 0 <= X <= w、0 <= Y <= h、W/H 非负且不超出画布——
+// 调用方（Crop 等）会直接拿 X、Y 去算切片偏移，把越界的原点原样留在结果里
+// 会造成越界 panic，即使宽高已经被压成 0。
 func (r Rect) Clip(w, h int) Rect {
 	if r.X < 0 {
 		r.W += r.X
@@ -28,6 +32,12 @@ func (r Rect) Clip(w, h int) Rect {
 	if r.Y < 0 {
 		r.H += r.Y
 		r.Y = 0
+	}
+	if r.X > w {
+		r.X = w
+	}
+	if r.Y > h {
+		r.Y = h
 	}
 	if r.X+r.W > w {
 		r.W = w - r.X
@@ -70,6 +80,9 @@ func (f *Frame) At(x, y int) (r, g, b, a uint8) {
 
 func (f *Frame) Crop(r Rect) *Frame {
 	r = r.Clip(f.W, f.H)
+	if r.Empty() {
+		return NewFrame(0, 0)
+	}
 	out := NewFrame(r.W, r.H)
 	for y := 0; y < r.H; y++ {
 		src := ((r.Y+y)*f.W + r.X) * 4
@@ -147,6 +160,9 @@ func (g *Gray) At(x, y int) uint8 { return g.Pix[y*g.W+x] }
 
 func (g *Gray) Crop(r Rect) *Gray {
 	r = r.Clip(g.W, g.H)
+	if r.Empty() {
+		return NewGray(0, 0)
+	}
 	out := NewGray(r.W, r.H)
 	for y := 0; y < r.H; y++ {
 		src := (r.Y+y)*g.W + r.X

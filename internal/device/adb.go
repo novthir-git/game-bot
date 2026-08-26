@@ -114,7 +114,8 @@ func (a *ADB) run(ctx context.Context, args ...string) ([]byte, error) {
 }
 
 func (a *ADB) runRaw(ctx context.Context, args ...string) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(ctx, a.timeout)
+	parent := ctx
+	ctx, cancel := context.WithTimeout(parent, a.timeout)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, a.bin, args...)
@@ -122,14 +123,25 @@ func (a *ADB) runRaw(ctx context.Context, args ...string) ([]byte, error) {
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
 	if err != nil {
+		desc := strings.Join(args, " ")
+
+		// 父 context 被取消（Ctrl-C）时，adb 子进程会被杀掉，
+		// cmd.Output() 返回的是「signal: killed」这类表象错误。
+		// 必须把 context 的 sentinel 用 %w 传上去：调度器靠
+		// errors.Is(err, context.Canceled) 区分「正常退出」和「任务失败」，
+		// 丢了它，一次 Ctrl-C 会被记成失败、存失败截图、甚至触发恢复流程。
+		if perr := parent.Err(); perr != nil {
+			return nil, fmt.Errorf("adb %s 被中断: %w", desc, perr)
+		}
+		// 到这里父 context 仍然正常，超时只可能来自本次调用自己的期限。
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			return nil, fmt.Errorf("adb %s 超时（%s）", strings.Join(args, " "), a.timeout)
+			return nil, fmt.Errorf("adb %s 超时（%s）: %w", desc, a.timeout, context.DeadlineExceeded)
 		}
 		msg := strings.TrimSpace(stderr.String())
 		if msg == "" {
 			msg = err.Error()
 		}
-		return nil, fmt.Errorf("adb %s 失败: %s", strings.Join(args, " "), msg)
+		return nil, fmt.Errorf("adb %s 失败: %s", desc, msg)
 	}
 	return out, nil
 }

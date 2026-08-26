@@ -53,7 +53,8 @@ func (t *FlowerRackCycle) RequiredTemplates() []string {
 // Progress 返回已完成次数与目标次数。
 func (t *FlowerRackCycle) Progress() (int, int) { return t.st.Done, t.cfg.TargetCount }
 
-func today() string { return time.Now().Format("2006-01-02") }
+// today 是包级变量而非普通函数，测试要靠替换它来模拟跨零点。
+var today = func() string { return time.Now().Format("2006-01-02") }
 
 // load 首次运行时从状态文件恢复进度。
 func (t *FlowerRackCycle) load(s *task.Session) {
@@ -82,11 +83,15 @@ func (t *FlowerRackCycle) load(s *task.Session) {
 	s.Log.Info("已恢复花架进度", "次数", st.Done, "上次上架", st.LastList.Format("15:04:05"))
 }
 
-func (t *FlowerRackCycle) save(s *task.Session) {
+// save 把进度落盘。day 必须是本轮 Run 开始时取的日期，不能在这里重新取：
+// 一轮 Run 含 enterPanel/WaitFor 等实机操作，可能跑十几秒。若某轮横跨零点，
+// 用结束时刻的日期落盘，就会把昨天累计的次数盖上今天的日期；
+// 下一轮看到日期已是今天，便认为「今天已处理过」，跨天重置这一天永远不会触发。
+func (t *FlowerRackCycle) save(s *task.Session, day string) {
 	if s.State == nil {
 		return
 	}
-	t.st.Date = today()
+	t.st.Date = day
 	if err := s.State.Set(stateKeyRack, t.st); err != nil {
 		// 落盘失败只影响重启后的恢复，不影响本次运行，记一条警告继续跑。
 		s.Log.Warn("花架进度落盘失败", "错误", err)
@@ -96,9 +101,12 @@ func (t *FlowerRackCycle) save(s *task.Session) {
 func (t *FlowerRackCycle) Run(ctx context.Context, s *task.Session) error {
 	t.load(s)
 
+	// 本轮的日期只取一次，重置判定和最后落盘都用它。
+	day := today()
+
 	// 跨天检查放在每次运行时做，而不是只在启动时做：
 	// 这个任务本来就要连着跑九个多小时，中途跨零点是常态。
-	if t.cfg.ResetDaily && t.st.Date != "" && t.st.Date != today() {
+	if t.cfg.ResetDaily && t.st.Date != "" && t.st.Date != day {
 		s.Log.Info("已跨天，花架进度归零", "上次日期", t.st.Date, "上次次数", t.st.Done)
 		t.st = rackState{}
 	}
@@ -154,7 +162,7 @@ func (t *FlowerRackCycle) Run(ctx context.Context, s *task.Session) error {
 
 	t.st.Done++
 	t.st.LastList = time.Now()
-	t.save(s)
+	t.save(s, day)
 	s.Log.Info("花架上架完成", "进度", fmt.Sprintf("%d/%d", t.st.Done, t.cfg.TargetCount))
 
 	return returnToMain(ctx, s)

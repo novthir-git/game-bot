@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -122,4 +123,99 @@ func TestLocalOverride(t *testing.T) {
 	if b.Device.Display.BaseWidth != 1280 {
 		t.Errorf("未覆盖字段被改动: base_width = %d", b.Device.Display.BaseWidth)
 	}
+}
+
+// local.yaml 覆盖某个任务的一个字段时，该任务其余字段必须保持不变。
+//
+// 这是一次真实缺陷的回归测试：yaml.v3 解码 map 的 value 时会新建零值
+// 整体替换那条 entry，导致 local.yaml 里只写 target_count 就把
+// enabled 清成了 false——任务被静默跳过，全程没有任何报错。
+func TestLocalOverrideKeepsOtherTaskFields(t *testing.T) {
+	dir := copyConfig(t)
+	os.WriteFile(filepath.Join(dir, "config", "local.yaml"),
+		[]byte("tasks:\n  flower_rack_cycle:\n    target_count: 200\n"), 0o644)
+
+	b, err := Load(dir)
+	if err != nil {
+		t.Fatalf("加载失败: %v", err)
+	}
+	got := b.Tasks.Tasks["flower_rack_cycle"]
+	if got.TargetCount != 200 {
+		t.Errorf("target_count 应被覆盖为 200，实际 %d", got.TargetCount)
+	}
+	if !got.Enabled {
+		t.Error("enabled 被覆盖操作清零了：任务会被静默跳过")
+	}
+	if got.RelistIntervalSec != 255 {
+		t.Errorf("relist_interval_sec 应保持 255，实际 %d", got.RelistIntervalSec)
+	}
+	if !got.ResetDaily {
+		t.Error("reset_daily 应保持 true")
+	}
+	if !got.PreferHighestPrice {
+		t.Error("prefer_highest_price 应保持 true")
+	}
+	// 未被提及的任务完全不受影响
+	if p := b.Tasks.Tasks["pearl_harvest"]; !p.Enabled || p.IntervalSec != 7200 {
+		t.Errorf("未被覆盖的任务受到了影响: %+v", p)
+	}
+}
+
+// local.yaml 走宽松解码，写错的字段名不会报错只会被忽略，
+// 这是最难排查的一类配置问题，必须在加载时拦下来。
+func TestLocalOverrideRejectsUnknownKey(t *testing.T) {
+	dir := copyConfig(t)
+	os.WriteFile(filepath.Join(dir, "config", "local.yaml"),
+		[]byte("adb:\n  prot: 16384\n"), 0o644) // port 拼成了 prot
+
+	_, err := Load(dir)
+	if err == nil {
+		t.Fatal("local.yaml 里的拼写错误应当被拦下")
+	}
+	if !strings.Contains(err.Error(), "adb.prot") {
+		t.Errorf("报错信息应指出具体是哪个键: %v", err)
+	}
+}
+
+// 合法的跨文件覆盖不应被上一条的检查误伤。
+func TestLocalOverrideAcrossFiles(t *testing.T) {
+	dir := copyConfig(t)
+	os.WriteFile(filepath.Join(dir, "config", "local.yaml"), []byte(
+		"adb:\n  port: 16384\nmatching:\n  default_threshold: 0.85\n"+
+			"tasks:\n  pearl_harvest:\n    interval_sec: 3600\n"), 0o644)
+
+	b, err := Load(dir)
+	if err != nil {
+		t.Fatalf("跨文件覆盖不应报错: %v", err)
+	}
+	if b.Device.ADB.Port != 16384 {
+		t.Errorf("device 侧覆盖失效: %d", b.Device.ADB.Port)
+	}
+	if b.Game.Matching.DefaultThreshold != 0.85 {
+		t.Errorf("game 侧覆盖失效: %v", b.Game.Matching.DefaultThreshold)
+	}
+	p := b.Tasks.Tasks["pearl_harvest"]
+	if p.IntervalSec != 3600 || !p.Enabled {
+		t.Errorf("tasks 侧覆盖失效: %+v", p)
+	}
+}
+
+func copyConfig(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	src := filepath.Join(gameDir(t), "config")
+	dst := filepath.Join(dir, "config")
+	if err := os.MkdirAll(dst, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{"device.yaml", "game.yaml", "tasks.yaml"} {
+		data, err := os.ReadFile(filepath.Join(src, f))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dst, f), data, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return dir
 }
