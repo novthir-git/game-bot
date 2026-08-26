@@ -1,9 +1,10 @@
-# Python
-__pycache__/
-*.py[cod]
-*.egg-info/
-.venv/
-venv/
+# Go 构建产物
+/gardenbot
+/gardenbot.exe
+/tune
+/tune.exe
+*.test
+*.out
 
 # 运行产物：日志、失败截图、临时截图
 games/*/logs/*

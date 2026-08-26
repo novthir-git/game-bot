@@ -62,6 +62,18 @@ templates/
   flower_rack/    花架（上架 / 下架 / 售价选择）
   daily/          花灵密令小屋、日常任务
   resources/      水车、珍珠采集点
-tasks/            任务流程脚本（待实现）
+tasks/            该游戏的任务实现（Go）
+  tasks.go        任务注册、界面跳转辅助、模板路径常量
+  waterwheel.go   水车领取
+  pearl.go        珍珠采集
+  flowerrack.go   花架上架循环
 logs/             运行日志与失败截图（不入库）
 ```
+
+## 当前进度
+
+P0 三个任务的流程已实现，但**模板图尚未采集**，因此还不能实际运行。
+跑 `gardenbot doctor` 会列出还缺哪些图；补齐后即可 `gardenbot run`。
+
+已知限制：花架的上架计数保存在内存里，进程重启会归零。
+考虑到这是个要连续跑 9 小时的任务，后续应当落盘持久化。
