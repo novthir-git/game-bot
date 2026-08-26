@@ -35,22 +35,35 @@ go test ./...
 ```
 gardenbot doctor    检查 adb、设备连接、分辨率、前台包名，并列出缺失的模板图
 gardenbot capture   截一张图保存到本地，用于制作模板
+gardenbot crop      从截图里裁出模板，并立刻验证它在原图中是否唯一
 gardenbot run       启动调度器，按 tasks.yaml 执行已启用的任务
 ```
 
 首次使用顺序：
 
 ```
-1. gardenbot doctor                       确认设备连通，并采集游戏包名
-2. gardenbot capture                      截图
-3. 按 templates/README.md 裁剪模板图
-4. go run ./cmd/tune -screen <截图> -template <模板>    核对匹配分数、定阈值
+1. gardenbot doctor                                  确认设备连通，并采集游戏包名
+2. gardenbot capture                                 截图
+3. gardenbot crop -screen <截图> -grid grid.png      生成坐标网格图，照着读区域坐标
+4. gardenbot crop -screen <截图> -rect x,y,w,h -o main/btn_xxx.png
+                                                     裁模板，保存后自动验证唯一性
 5. gardenbot run
 ```
+
+**不需要为每个模板单独截图。** 一张完整截图可以裁出好几个模板——
+主界面那一张就能裁出主界面锚点和各个功能入口。13 个模板大约只要 5 张截图。
+
+`crop` 保存后会把模板放回原截图里搜一遍，报告最高分与次高分的差距。
+差距过小说明这块区域在画面里不唯一，运行时会点错地方——这种错误在日志里
+表现为「点了但没反应」，极难倒推，所以裁剪当场就要拦下来。
+纯色区域会被直接拒绝：它在 ZNCC 下分母为零，永远匹配不上。
 
 `cmd/tune` 是离线调参工具：给它一张截图和一张模板，它报告匹配分数、位置，
 以及**最高分与次高分的差距**——差距大小决定这张模板够不够有辨识度，
 比单看最高分有用得多。加 `-out` 可以输出标注图。
+
+`crop` 用于制作模板并当场验证，`tune` 用于事后在别的截图上复核已有模板
+（比如某张模板在夜晚场景下匹配不上时，拿夜晚的截图跑一遍看分数掉到了多少）。
 
 ## 目录结构
 

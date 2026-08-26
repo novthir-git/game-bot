@@ -1,5 +1,24 @@
 # 模板图规范
 
+## 采集流程
+
+```
+gardenbot capture                                    截一张完整截图
+gardenbot crop -screen <截图> -grid grid.png         生成坐标网格图，读出区域坐标
+gardenbot crop -screen <截图> -rect x,y,w,h -o <路径>  裁剪并自动验证
+```
+
+一张完整截图能裁出多个模板，不需要一个模板截一次图。13 个模板大约 5 张截图即可：
+
+| 截这张 | 能裁出 |
+|---|---|
+| 主界面 | `main/anchor_main.png`、`main/btn_flower_rack.png`、`main/btn_pearl.png`、`main/btn_waterwheel.png`、`resources/icon_pearl_ready.png` |
+| 花架界面（架上有货） | `flower_rack/anchor_rack.png`、`flower_rack/btn_delist.png` |
+| 花架界面（架上空着） | `flower_rack/state_slot_empty.png`、`flower_rack/btn_list.png`、`flower_rack/btn_confirm.png` |
+| 水车界面 | `resources/btn_collect_water.png` |
+| 珍珠采集界面 | `resources/btn_collect_pearl.png` |
+| 任意弹窗 | `common/btn_close.png` |
+
 ## 采集要求
 
 所有模板图必须在 **1280x720 / DPI 240**（MuMu「设置 - 显示」固定为手机版）下截取，
@@ -41,7 +60,16 @@
 
 默认匹配阈值 `0.78`（见 `config/game.yaml` 的 `matching.default_threshold`），默认转灰度。
 
+`crop` 保存后会自动把模板放回原截图搜一遍，看输出里的**最高分与次高分之差**：
+
+| 差距 | 含义 |
+|---|---|
+| ≥ 0.15 | 辨识度充足，默认阈值可用 |
+| 0.05 ~ 0.15 | 偏小，画面稍有变化就可能误判；收窄范围或加 ROI |
+| < 0.05 | 在画面里不唯一，运行时几乎一定点错地方，必须重裁 |
+
 若某张图匹配不稳定，按顺序尝试：
 1. 缩小截取范围，只留最有辨识度的部分
-2. 单独为该模板降低阈值（不要全局降，会引发误匹配）
-3. 该元素本身有动画 —— 换一个静止的参照物做锚点
+2. 加 ROI 限定搜索区域——`crop` 的输出里直接给了可用的 `vision.Rect`
+3. 单独为该模板降低阈值（不要全局降，会引发误匹配）
+4. 该元素本身有动画 —— 换一个静止的参照物做锚点
