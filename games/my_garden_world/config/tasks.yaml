@@ -1,0 +1,82 @@
+# 任务清单配置
+#
+# enabled: false 的任务不会被调度器执行。
+# 第一阶段只开 P0 的三个任务，跑稳之后再逐个打开后面的。
+
+tasks:
+
+  # ---------- P0：先实现这三个，收益约占八成 ----------
+
+  flower_rack_cycle:
+    enabled: true
+    priority: 0
+    description: "花架上架循环：上架后 4 分钟下架，重新上架，刷满次数"
+    # TODO: 135 为攻略数据，需在游戏内确认
+    target_count: 135
+    # 攻略称上架 4 分钟后即可下架重上，实测可能有偏差，留 15 秒余量
+    relist_interval_sec: 255
+    # 始终选择最高价的花艺品上架
+    prefer_highest_price: true
+
+  pearl_harvest:
+    enabled: true
+    priority: 0
+    description: "珍珠采集，每 2 小时一次"
+    interval_sec: 7200
+    # 允许的提前量，避免因调度抖动错过一轮
+    tolerance_sec: 120
+
+  waterwheel_collect:
+    enabled: true
+    priority: 0
+    description: "领取水车免费水滴，防止容量溢出"
+    # 保守间隔，宁可多跑一次也不要溢出。TODO: 确认水车实际满仓时间后调整
+    interval_sec: 3600
+
+  # ---------- P1：第一阶段跑稳后再开 ----------
+
+  popup_guard:
+    enabled: false
+    priority: 1
+    description: "通用弹窗关闭兜底，决定能否长时间无人值守"
+
+  daily_quests:
+    enabled: false
+    priority: 1
+    description: "花灵密令小屋日常任务，完成后领取 100 体力"
+
+  submit_orders:
+    enabled: false
+    priority: 1
+    description: "提交居民订单 / 顾客订单 / 宫廷特供"
+
+  # ---------- P2：暂不实现 ----------
+
+  event_rotation:
+    enabled: false
+    priority: 2
+    description: "四大活动轮转：百花成蜜 -> 花笺集芳 -> 碎玉成瓶 -> 莳花纪闻"
+
+  # ---------- 明确不实现 ----------
+
+  watch_ads:
+    enabled: false
+    priority: 99
+    description: >
+      激励视频广告（每日 1 次，4 小时双倍金币）。
+      不实现：时长不定、关闭按钮位置随机、多为第三方 SDK 界面且可能跳出外部应用，
+      实现成本极高而收益最低。
+
+scheduler:
+  # 单账号运行。本项目不支持多开刷号。
+  single_account_only: true
+  # 主循环轮询间隔
+  tick_interval_sec: 5
+  # 每轮结束后的休息，避免完全机械的固定节奏
+  idle_jitter_sec: [2, 8]
+
+logging:
+  level: INFO
+  # 任务失败时自动保存当前截图到 logs/，便于事后定位卡在哪个界面
+  save_screenshot_on_failure: true
+  retain_days: 7

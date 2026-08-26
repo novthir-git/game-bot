@@ -1,0 +1,43 @@
+# MuMu 12 设备连接配置
+#
+# 本文件入库，只放通用默认值。
+# 机器相关的差异（自定义安装路径、非默认端口）请写到同目录的 local.yaml，
+# local.yaml 已被 .gitignore 忽略，会覆盖本文件的同名字段。
+
+adb:
+  # 必须使用 MuMu 自带的 adb，系统里其他版本的 adb 会互相 kill-server。
+  # 默认路径，安装位置不同请在 local.yaml 覆盖。
+  binary: "C:/Program Files/Netease/MuMu Player 12/shell/adb.exe"
+
+  host: "127.0.0.1"
+
+  # MuMu 12 第一个实例的默认 ADB 端口。
+  # 多开实例端口各不相同，不要硬编码——用以下任一方式确认：
+  #   1. MuMu 多开管理器界面上直接显示
+  #   2. <MuMu安装目录>/shell/adb.exe devices
+  port: 7555
+
+  connect_timeout_sec: 10
+
+display:
+  # 模板图的基准分辨率。所有 templates/ 下的图都按这个尺寸截取，
+  # 运行时若实际分辨率不同，按比例缩放坐标。
+  # 请在 MuMu「设置 - 显示」中固定为手机版 1280x720 / DPI 240。
+  base_width: 1280
+  base_height: 720
+  base_dpi: 240
+
+capture:
+  # 本游戏节奏慢，screencap 的延迟完全够用，无需 scrcpy / minicap。
+  # 可选值: screencap | screencap_raw
+  method: screencap
+  # 两次截图之间的最小间隔，避免无意义的高频截图占 CPU
+  min_interval_ms: 500
+
+input:
+  # 可选值: adb_input（零依赖，150~300ms）| minitouch（低延迟，需 push 二进制）
+  method: adb_input
+  # 点击后的固定等待，给界面动画留时间
+  post_click_delay_ms: 400
+  # 点击坐标的随机抖动半径（像素），避免每次都点在同一像素上导致误触边界
+  tap_jitter_px: 3

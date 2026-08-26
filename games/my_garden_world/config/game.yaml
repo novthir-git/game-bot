@@ -1,0 +1,52 @@
+# 《我的花园世界》游戏侧配置
+#
+# 注意：本文件中标记 TODO 的字段尚未确认，需要在真机/模拟器上采集后填写。
+
+app:
+  name: "我的花园世界"
+  platform: android_apk        # 仅支持 APK 版；微信/抖音小游戏版布局不同，不通用
+
+  # TODO: 包名待确认。用以下命令采集（先手动把游戏切到前台）：
+  #   adb shell dumpsys window | grep mCurrentFocus
+  # 或列出全部第三方包再筛选：
+  #   adb shell pm list packages -3
+  package: ""
+
+  # TODO: 启动 Activity 待确认。采集方式：
+  #   adb shell dumpsys package <package> | grep -A2 "android.intent.action.MAIN"
+  main_activity: ""
+
+  # 冷启动到主界面的预期耗时上限（秒），超时判定为启动失败
+  launch_timeout_sec: 120
+
+matching:
+  # 模板匹配默认阈值。本游戏为水彩风格，低对比度 + 渐变背景，
+  # 阈值不宜过高，先按 0.78 起调。
+  default_threshold: 0.78
+  # 匹配前转灰度，可显著降低色彩渐变带来的干扰
+  grayscale: true
+
+ocr:
+  # 艺术字带描边，OCR 准确率有限。
+  # 原则：能用图标/进度条/按钮置灰状态判断的，一律不要用 OCR 读数字。
+  enabled: false
+  engine: rapidocr
+
+anchors:
+  # 界面锚点：用于判断「当前在哪个界面」。
+  # 每一项对应 templates/ 下的一张模板图，路径相对 templates/ 目录。
+  # TODO: 全部待截图采集。
+  main_screen: "main/anchor_main.png"
+  flower_rack: "flower_rack/anchor_rack.png"
+  daily_panel: "daily/anchor_daily.png"
+
+recovery:
+  # 异常兜底：连续 N 次找不到目标就执行恢复流程
+  max_miss_before_recover: 5
+  # 恢复流程：依次尝试关闭弹窗 -> 点空白 -> 连按返回键 -> 重启 App
+  steps:
+    - close_popup
+    - tap_blank
+    - press_back_repeat
+    - restart_app
+  press_back_times: 3

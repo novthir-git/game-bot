@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# 运行产物：日志、失败截图、临时截图
+games/*/logs/*
+!games/*/logs/.gitkeep
+*.log
+debug/
+screenshots/
+
+# 本地覆盖配置（含设备端口等机器相关设置，不入库）
+config/local.yaml
+games/*/config/local.yaml
+
+# 编辑器 / 系统
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
