@@ -89,7 +89,7 @@ func TestRequiredTemplatesDedupes(t *testing.T) {
 		{task: fakeTask{name: "a", tpls: []string{"x/one.png", "x/two.png"}}},
 		{task: fakeTask{name: "b", tpls: []string{"x/two.png", "x/three.png"}}},
 	}
-	got := s.requiredFrom(nil)
+	got := s.requiredFrom("")
 	want := []string{TplClose, "x/one.png", "x/three.png", "x/two.png"}
 	if len(got) != len(want) {
 		t.Fatalf("模板去重结果 = %v，期望 %v", got, want)

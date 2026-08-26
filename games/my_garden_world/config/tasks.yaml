@@ -17,6 +17,12 @@ tasks:
     relist_interval_sec: 255
     # 始终选择最高价的花艺品上架
     prefer_highest_price: true
+    # 目标次数是否按天重置。
+    # TODO: 需确认 135 次是每日任务还是一次性累计目标。
+    # 暂定 true，因为它是更安全的一侧：若实为每日任务而不重置，
+    # bot 刷满一次后就再也不动了；若实为累计目标而误重置，
+    # 只是刷满后继续空转，浪费动作但不会漏掉进度。
+    reset_daily: true
 
   pearl_harvest:
     enabled: true

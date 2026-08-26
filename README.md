@@ -17,6 +17,7 @@
 | 模板匹配 | 手写 ZNCC，与 OpenCV 的 `TM_CCOEFF_NORMED` 同量纲 |
 | 比色 / 进度条 | 切片索引 |
 | 任务调度 | 单循环 + 优先级，`time` 标准库 |
+| 进度持久化 | JSON 状态文件，临时文件加改名保证原子性 |
 | 日志 | `log/slog` |
 
 **不使用 OCR。** bot 需要的是状态判断而非数值读取；计数和计时一律由程序自己维护，
@@ -62,6 +63,7 @@ internal/
   device/          ADB 封装、screencap 解析、坐标归一化
   vision/          ZNCC 模板匹配、比色、进度条测量、模板缓存
   task/            识别原语（Find/Click/WaitFor/WaitVanish）、调度器、异常恢复
+  state/           任务进度持久化，进程重启后自动恢复
 games/             每个游戏一个独立目录
   my_garden_world/ 我的花园世界
     README.md      游戏档案 + 自动化目标

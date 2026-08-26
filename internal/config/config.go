@@ -116,8 +116,16 @@ func (g *Game) validate() error {
 	if g.Recovery.MaxMissBeforeRecover <= 0 {
 		g.Recovery.MaxMissBeforeRecover = 5
 	}
+	// 恢复流程的终点是「回到主界面」，没有这个锚点就无法判断是否已恢复。
+	if g.Anchors[AnchorMain] == "" {
+		return fmt.Errorf("anchors.%s 必须配置：异常恢复要靠它判断是否已回到主界面", AnchorMain)
+	}
 	return nil
 }
+
+// AnchorMain 是主界面锚点在 anchors 里的键名。
+// 它是唯一被框架强制要求的锚点，其余锚点属于按需声明，由任务自行使用。
+const AnchorMain = "main_screen"
 
 // ---------- tasks.yaml ----------
 
@@ -132,6 +140,7 @@ type Task struct {
 	IntervalSec        int  `yaml:"interval_sec"`
 	ToleranceSec       int  `yaml:"tolerance_sec"`
 	PreferHighestPrice bool `yaml:"prefer_highest_price"`
+	ResetDaily         bool `yaml:"reset_daily"`
 }
 
 func (t Task) Interval() time.Duration  { return time.Duration(t.IntervalSec) * time.Second }
@@ -204,6 +213,10 @@ func (b *Bundle) TemplatesDir() string { return filepath.Join(b.Dir, "templates"
 
 // LogsDir 返回该游戏的日志目录。
 func (b *Bundle) LogsDir() string { return filepath.Join(b.Dir, "logs") }
+
+// StatePath 返回任务进度的持久化文件路径。
+// 放在 logs/ 下而不是游戏目录根部，因为它和日志一样属于运行产物，不该进仓库。
+func (b *Bundle) StatePath() string { return filepath.Join(b.LogsDir(), "state.json") }
 
 // Load 读取 gameDir/config/ 下的 device.yaml、game.yaml、tasks.yaml，
 // 并依次叠加同目录的 local.yaml（若存在）。

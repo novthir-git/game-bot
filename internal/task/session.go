@@ -10,6 +10,7 @@ import (
 
 	"github.com/novthir-git/game-bot/internal/config"
 	"github.com/novthir-git/game-bot/internal/device"
+	"github.com/novthir-git/game-bot/internal/state"
 	"github.com/novthir-git/game-bot/internal/vision"
 )
 
@@ -30,11 +31,15 @@ type Session struct {
 	Cfg *config.Bundle
 	Log *slog.Logger
 
+	// State 持久化任务进度，可以为 nil（例如 doctor 只做检查，不需要状态）。
+	// 任务读写前必须判空。
+	State *state.Store
+
 	missStreak int // 连续找不到目标的次数，用于触发恢复流程
 }
 
-func NewSession(dev *device.Device, tpl *vision.Store, cfg *config.Bundle, log *slog.Logger) *Session {
-	return &Session{Dev: dev, Tpl: tpl, Cfg: cfg, Log: log}
+func NewSession(dev *device.Device, tpl *vision.Store, cfg *config.Bundle, st *state.Store, log *slog.Logger) *Session {
+	return &Session{Dev: dev, Tpl: tpl, Cfg: cfg, State: st, Log: log}
 }
 
 // FindOpt 是查找选项。
@@ -213,7 +218,7 @@ func (s *Session) Recover(ctx context.Context) error {
 			if err := s.Dev.LaunchApp(ctx, s.Cfg.Game.App.Package, s.Cfg.Game.App.MainActivity); err != nil {
 				return err
 			}
-			if _, ok, err := s.WaitFor(ctx, s.Cfg.Game.Anchors["main_screen"], s.Cfg.Game.LaunchTimeout()); err != nil {
+			if _, ok, err := s.WaitFor(ctx, s.Cfg.Game.Anchors[config.AnchorMain], s.Cfg.Game.LaunchTimeout()); err != nil {
 				return err
 			} else if ok {
 				return nil
@@ -226,9 +231,9 @@ func (s *Session) Recover(ctx context.Context) error {
 }
 
 func (s *Session) backAtMain(ctx context.Context) (bool, error) {
-	anchor, ok := s.Cfg.Game.Anchors["main_screen"]
+	anchor, ok := s.Cfg.Game.Anchors[config.AnchorMain]
 	if !ok || anchor == "" {
-		return false, fmt.Errorf("anchors.main_screen 未配置")
+		return false, fmt.Errorf("anchors.%s 未配置", config.AnchorMain)
 	}
 	_, hit, err := s.Find(ctx, anchor)
 	return hit, err

@@ -7,6 +7,8 @@ import (
 	"math/rand/v2"
 	"sort"
 	"time"
+
+	"github.com/novthir-git/game-bot/internal/config"
 )
 
 // Task 是一个可被调度的任务。
@@ -73,22 +75,26 @@ func (s *Scheduler) Add(t Task, interval time.Duration, priority int) {
 // Len 返回已注册的任务数。
 func (s *Scheduler) Len() int { return len(s.entries) }
 
-// RequiredTemplates 汇总所有已注册任务声明的模板依赖，外加通用模板和界面锚点。
+// RequiredTemplates 汇总真正会用到的模板：框架自身需要的，加上已启用任务声明的。
+//
+// 这里刻意不把 game.yaml 里 anchors 下的所有锚点都算进来。
+// anchors 是一张按需取用的查找表，某个锚点只有在有任务用到时才是必需的；
+// 全部当作必需会要求用户去截一些当前根本用不上的图——
+// 比如日常任务尚未启用时，却被要求提供日常界面的锚点。
 func (s *Scheduler) RequiredTemplates() []string {
-	return s.requiredFrom(s.sess.Cfg.Game.Anchors)
+	return s.requiredFrom(s.sess.Cfg.Game.Anchors[config.AnchorMain])
 }
 
-func (s *Scheduler) requiredFrom(anchors map[string]string) []string {
+func (s *Scheduler) requiredFrom(mainAnchor string) []string {
 	seen := map[string]bool{}
 	add := func(n string) {
 		if n != "" && !seen[n] {
 			seen[n] = true
 		}
 	}
+	// 这两张是框架级依赖：恢复流程要关弹窗，也要靠主界面锚点判断是否已恢复。
 	add(TplClose)
-	for _, a := range anchors {
-		add(a)
-	}
+	add(mainAnchor)
 	for _, e := range s.entries {
 		if tu, ok := e.task.(TemplateUser); ok {
 			for _, n := range tu.RequiredTemplates() {
